@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Snake Adventure</title>
+<style>
+    :root { --bg: #111; --canvas-bg: #1a1a1a; --text: #fff; --snake: #2ecc71; --snake-head: #27ae60; --food: #e74c3c; --border: #2ecc71; --btn-bg: rgba(255,255,255,0.15); --btn-border: rgba(255,255,255,0.3); }
+    .light-theme { --bg: #f0f0f0; --canvas-bg: #fff; --text: #000; --snake: #27ae60; --snake-head: #2ecc71; --food: #c0392b; --border: #27ae60; --btn-bg: rgba(0,0,0,0.15); --btn-border: rgba(0,0,0,0.3); }
+    
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; margin: 0; overflow: hidden; touch-action: none; transition: background 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+    
+    .score { font-size: 48px; font-weight: bold; color: var(--border); margin-bottom: 10px; text-shadow: 0 0 15px var(--border); transition: color 0.3s; }
+    
+    canvas { background: var(--canvas-bg); border: 4px solid var(--border); border-radius: 20px; box-shadow: 0 0 30px rgba(46, 204, 113, 0.3); transition: background 0.3s, border 0.3s; width: 90vw; height: 90vw; max-height: 55vh; max-width: 55vh; }
+    
+    .controls { position: absolute; bottom: 20px; left: 15px; display: grid; grid-template-columns: repeat(3, 75px); gap: 8px; z-index: 10; }
+    button { width: 75px; height: 75px; background: var(--btn-bg); color: var(--text); border: 3px solid var(--btn-border); font-size: 32px; border-radius: 50%; user-select: none; -webkit-tap-highlight-color: transparent; backdrop-filter: blur(5px); transition: all 0.1s; display: flex; align-items: center; justify-content: center; }
+    button:active { background: var(--border); color: #fff; transform: scale(0.95); }
+    
+    #settings-btn { position: absolute; top: 20px; right: 20px; width: 60px; height: 60px; font-size: 28px; cursor: pointer; background: var(--btn-bg); color: var(--text); border: 3px solid var(--btn-border); z-index: 10; }
+    #theme-toggle { position: absolute; top: 90px; right: 20px; width: 60px; height: 60px; font-size: 28px; cursor: pointer; background: var(--btn-bg); color: var(--text); border: 3px solid var(--btn-border); z-index: 10; }
+    #music-toggle { position: absolute; top: 160px; right: 20px; width: 60px; height: 60px; font-size: 28px; cursor: pointer; background: var(--btn-bg); color: var(--text); border: 3px solid var(--btn-border); z-index: 10; }
+
+    #settings-menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); border: 3px solid var(--border); border-radius: 20px; padding: 30px; z-index: 100; display: none; flex-direction: column; gap: 20px; color: white; width: 80%; max-width: 400px; }
+    #settings-menu h2 { margin: 0; color: var(--border); }
+    .setting-item { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+    .setting-item label { font-size: 18px; }
+    .setting-item input[type=range] { width: 100%; height: 30px; }
+    .setting-item select { width: 100%; padding: 10px; font-size: 18px; border-radius: 10px; background: #333; color: white; border: 1px solid var(--border); }
+    #close-settings { padding: 15px; font-size: 20px; background: var(--border); color: #000; border: none; border-radius: 10px; cursor: pointer; margin-top: 10px; }
+</style>
+</head>
+<body>
+    <div id="settings-menu">
+        <h2>⚙️ Настройки</h2>
+        <div class="setting-item">
+            <label>Громкость музыки</label>
+            <input type="range" id="volume-slider" min="0" max="100" value="30">
+        </div>
+        <div class="setting-item">
+            <label>Частота кадров (FPS)</label>
+            <select id="fps-select">
+                <option value="30">30 FPS (Экономия)</option>
+                <option value="60" selected>60 FPS (Стандарт)</option>
+                <option value="90">90 FPS (Плавно)</option>
+                <option value="120">120 FPS (Максимум)</option>
+            </select>
+        </div>
+        <button id="close-settings" onclick="toggleSettings()">Закрыть</button>
+    </div>
+
+    <button id="settings-btn" onclick="toggleSettings()">⚙️</button>
+    <button id="theme-toggle" onclick="toggleTheme()">🌙</button>
+    <button id="music-toggle" onclick="toggleMusic()">🔇</button>
+    
+    <div class="score" id="score">0</div>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    
+    <div class="controls">
+        <div></div> <button onclick="changeDir('up')">▲</button> <div></div>
+        <button onclick="changeDir('left')">◀</button> <div></div>
+        <button onclick="changeDir('right')">▶</button> <div></div> <button onclick="changeDir('down')">▼</button> <div></div>
+    </div>
+    
+    <script>
+        let isDark = true;
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle("light-theme");
+            document.getElementById("theme-toggle").innerText = isDark ? "🌙" : "☀️";
+        }
+
+        function toggleSettings() {
+            let menu = document.getElementById("settings-menu");
+            menu.style.display = menu.style.display === "flex" ? "none" : "flex";
+        }
+
+        let currentFPS = 60;
+        let targetFrameTime = 1000 / currentFPS;
+        let musicVolume = 0.3;
+        let isMusicOn = false;
+
+        document.getElementById("fps-select").addEventListener("change", (e) => {
+            currentFPS = parseInt(e.target.value);
+            targetFrameTime = 1000 / currentFPS;
+        });
+
+        document.getElementById("volume-slider").addEventListener("input", (e) => {
+            musicVolume = parseInt(e.target.value) / 100;
+            if (audioCtx && audioCtx.state === 'running') {
+                masterGain.gain.setValueAtTime(musicVolume * 0.1, audioCtx.currentTime);
+            }
+        });
+
+        let audioCtx;
+        let masterGain;
+        let musicInterval;
+        let noteIndex = 0;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = musicVolume * 0.1;
+                masterGain.connect(audioCtx.destination);
+            }
+        }
+
+        function playNote(freq, duration) {
+            if (!audioCtx || !isMusicOn) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function toggleMusic() {
+            initAudio();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            isMusicOn = !isMusicOn;
+            document.getElementById("music-toggle").innerText = isMusicOn ? "🔊" : "🔇";
+            
+            if (isMusicOn) {
+                const bassLine = [110, 110, 110, 110, 130.81, 130.81, 130.81, 130.81, 146.83, 146.83, 146.83, 146.83, 164.81, 164.81, 164.81, 164.81];
+                musicInterval = setInterval(() => {
+                    if (!isMusicOn) return;
+                    playNote(bassLine[noteIndex % bassLine.length], 0.15);
+                    if (noteIndex % 2 === 0) playNote(bassLine[noteIndex % bassLine.length] * 2, 0.1);
+                    noteIndex++;
+                }, 150);
+            } else {
+                clearInterval(musicInterval);
+            }
+        }
+
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        
+        const box = 32; 
+        const gridWidth = canvas.width / box;
+        const gridHeight = canvas.height / box;
+        
+        let snake = [{x: 3, y: 3}, {x: 2, y: 3}, {x: 1, y: 3}];
+        let food = {x: 8, y: 8};
+        let dir = "right";
+        let nextDir = "right";
+        let score = 0;
+        let lastMoveTime = 0;
+        const moveSpeed = 140;
+
+        // Функция для спавна яблока ТОЛЬКО на свободных клетках
+        function spawnFood() {
+            let freeCells = [];
+            for (let x = 0; x < gridWidth; x++) {
+                for (let y = 0; y < gridHeight; y++) {
+                    if (!snake.some(s => s.x === x && s.y === y)) {
+                        freeCells.push({x, y});
+                    }
+                }
+            }
+            if (freeCells.length > 0) {
+                food = freeCells[Math.floor(Math.random() * freeCells.length)];
+            }
+        }
+
+        // Спавним первое яблоко
+        spawnFood();
+
+        function changeDir(newDir) {
+            if ((dir === "left" && newDir === "right") || (dir === "right" && newDir === "left") || (dir === "up" && newDir === "down") || (dir === "down" && newDir === "up")) return;
+            nextDir = newDir;
+        }
+
+        let touchStartX = 0, touchStartY = 0;
+        document.addEventListener("touchstart", (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, false);
+        document.addEventListener("touchend", (e) => {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            let dx = touchEndX - touchStartX;
+            let dy = touchEndY - touchStartY;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > 30) { if (dx > 0) changeDir("right"); else changeDir("left"); }
+            } else {
+                if (Math.abs(dy) > 30) { if (dy > 0) changeDir("down"); else changeDir("up"); }
+            }
+        }, false);
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowUp") changeDir("up");
+            if (e.key === "ArrowDown") changeDir("down");
+            if (e.key === "ArrowLeft") changeDir("left");
+            if (e.key === "ArrowRight") changeDir("right");
+        });
+
+        function update() {
+            dir = nextDir;
+            let head = {x: snake[0].x, y: snake[0].y};
+            if (dir === "right") head.x++;
+            if (dir === "left") head.x--;
+            if (dir === "up") head.y--;
+            if (dir === "down") head.y++;
+
+            // Проверка на столкновение с собой (точная, по клеткам)
+            if (snake.some(s => s.x === head.x && s.y === head.y)) {
+                alert("Игра окончена! Счет: " + score);
+                snake = [{x: 3, y: 3}, {x: 2, y: 3}, {x: 1, y: 3}];
+                dir = "right"; nextDir = "right";
+                score = 0;
+                document.getElementById("score").innerText = "0";
+                spawnFood();
+                return;
+            }
+
+            // Телепорт через стены
+            if (head.x < 0) head.x = gridWidth - 1;
+            if (head.x >= gridWidth) head.x = 0;
+            if (head.y < 0) head.y = gridHeight - 1;
+            if (head.y >= gridHeight) head.y = 0;
+
+            snake.unshift(head);
+
+            // Если съели яблоко
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                document.getElementById("score").innerText = score;
+                spawnFood(); // Спавним новое яблоко на свободном месте
+                if (isMusicOn) playNote(880, 0.1); 
+            } else {
+                snake.pop();
+            }
+        }
+
+        let lastFrameTime = 0;
+
+        function draw(currentTime) {
+            requestAnimationFrame(draw);
+
+            if (currentTime - lastFrameTime < targetFrameTime - 1) return;
+            lastFrameTime = currentTime;
+
+            if (!lastMoveTime) lastMoveTime = currentTime;
+            if (currentTime - lastMoveTime > moveSpeed) {
+                update();
+                lastMoveTime = currentTime - ((currentTime - lastMoveTime) % moveSpeed);
+            }
+
+            const cs = getComputedStyle(document.body);
+            ctx.fillStyle = cs.getPropertyValue("--canvas-bg").trim();
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < snake.length; i++) {
+                ctx.fillStyle = i === 0 ? cs.getPropertyValue("--snake-head").trim() : cs.getPropertyValue("--snake").trim();
+                ctx.beginPath();
+                ctx.roundRect(snake[i].x * box + 1, snake[i].y * box + 1, box - 2, box - 2, 6);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = cs.getPropertyValue("--food").trim();
+            ctx.beginPath();
+            ctx.arc(food.x * box + box/2, food.y * box + box/2, box/2 + 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = "rgba(255,255,255,0.6)";
+            ctx.beginPath();
+            ctx.arc(food.x * box + box/2 - 4, food.y * box + box/2 - 4, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        requestAnimationFrame(draw);
+    </script>
+</body>
+</html>
